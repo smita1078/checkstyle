@@ -186,32 +186,24 @@ jobs:
         env:
           MSG: ${{ needs.make_report.outputs.message }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          FAILURE_PREFIX: "Report generation"
         run: |
           mkdir -p .ci-temp
-          if [ -z "$MSG" ]; then
-            JOBS_LINK="https://github.com/checkstyle/checkstyle/actions/runs/${{github.run_id}}"
-            API_LINK="https://api.github.com/repos/checkstyle/checkstyle/actions/runs/"
-            API_LINK="${API_LINK}${{github.run_id}}/jobs"
-
-            curl --fail-with-body -X GET "${API_LINK}" \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: token $GITHUB_TOKEN" \
-              -o .ci-temp/info.json
-
-            jq '.jobs' .ci-temp/info.json > ".ci-temp/jobs"
-            jq '.[] | select(.conclusion == "failure") | .name' .ci-temp/jobs > .ci-temp/job_name
-            jq '.[] | select(.conclusion == "failure") | .steps' .ci-temp/jobs > .ci-temp/steps
-            jq '.[] | select(.conclusion == "failure") | .name' .ci-temp/steps > .ci-temp/step_name
-            echo "Report generation failed on phase $(cat .ci-temp/job_name)," > .ci-temp/message
-            echo "step $(cat .ci-temp/step_name).<br>Link: $JOBS_LINK" >> .ci-temp/message
-          else
+          if [ -n "$MSG" ]; then
             echo "$MSG" > .ci-temp/message
+          else
+            ./.ci/send_message.sh get-message
           fi
 
       - name: Set message
         id: out
         run: |
-          ./.ci/append-to-github-output.sh "message" "$(cat .ci-temp/message)"
+          if [ -f .ci-temp/message ]; then
+            ./.ci/append-to-github-output.sh "message" "$(cat .ci-temp/message)"
+          else
+            ./.ci/append-to-github-output.sh "message" "Report generation workflow failed. Check logs for details."
+          fi
 
       - name: Comment PR
         uses: checkstyle/contribution/comment-action@master
